@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #f6f5f1;
+  --ink: #0f0f0f;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-tick: #8b8880;
+  color-scheme: light;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-paper font-sans text-ink;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: #0f0f0f;
+    color: #f6f5f1;
+  }
+  :focus-visible {
+    outline: 2px solid #2a78d6;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.45;
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .page {
+    @apply mx-auto w-full max-w-page px-4 sm:px-8 lg:px-10;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .hairline {
+    @apply border-line;
+  }
+  .field {
+    @apply w-full rounded border border-line bg-white/70 px-3 py-2.5 text-[15px] text-ink transition-colors duration-200 placeholder:text-ink-mute hover:border-ink/25 focus:border-ink/50 focus:bg-white focus:outline-none;
+  }
+  .field-invalid {
+    @apply border-loss/60 bg-loss/[0.03] hover:border-loss/70 focus:border-loss;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-paper transition-all duration-300 ease-out hover:bg-black hover:shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ink/30 disabled:shadow-none;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-ink-2 transition-colors hover:bg-ink/[0.05] hover:text-ink;
+  }
+  .link-arrow {
+    @apply inline-flex items-center gap-1 text-accent transition-[gap] duration-300 hover:gap-2;
+  }
+}
+
+/* Shimmer for loading skeletons */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(15,15,15,0.05) 0%, rgba(15,15,15,0.09) 50%, rgba(15,15,15,0.05) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 6px;
+}
+
+/* Hero background drift */
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-2%, 1.5%, 0) scale(1.04); }
+}
+.hero-glow {
+  animation: drift 18s ease-in-out infinite;
+}
+
+/* Recharts: keep chrome recessive */
+.recharts-cartesian-axis-tick-value { font-variant-numeric: tabular-nums; }
+.recharts-surface:focus, .recharts-wrapper:focus, .recharts-sector:focus { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
