@@ -1,6 +1,6 @@
 # API Documentation
 
-Base URL (development): `http://127.0.0.1:8000`. Interactive OpenAPI docs: `/docs`; schema: `/openapi.json`.
+Base URL (development): `http://127.0.0.1:8000`. Interactive OpenAPI docs: `/api/docs`; schema: `/api/openapi.json`.
 
 All request and response bodies are JSON. **Weights, returns, rates and drawdowns are decimal
 fractions** (0.4 = 40%). Dates are ISO `YYYY-MM-DD`.

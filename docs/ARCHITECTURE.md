@@ -102,7 +102,7 @@ store is needed.
 
 | Choice | Reason |
 |---|---|
-| **FastAPI + Pydantic** | Declarative validation with precise error messages, automatic OpenAPI docs at `/docs`, sync endpoints run in a worker thread so blocking pandas/yfinance work does not stall the event loop. |
+| **FastAPI + Pydantic** | Declarative validation with precise error messages, automatic OpenAPI docs at `/api/docs`, sync endpoints run in a worker thread so blocking pandas/yfinance work does not stall the event loop. |
 | **pandas / NumPy** | Index-aligned time-series arithmetic is exactly what return series need; vectorised `@` for weighted returns. |
 | **yfinance** | Free access to adjusted daily prices for NSE, BSE and global symbols. Wrapped behind a `PriceProvider` protocol so it can be replaced. |
 | **Vite** (over Next.js) | The app is a single interactive page with no SEO-critical routes or server rendering needs; Vite gives the fastest dev loop and a static bundle FastAPI can serve. |
@@ -128,10 +128,13 @@ store is needed.
 - **Development:** Vite on `:5173` proxies `/api` to Uvicorn on `:8000`.
 - **Production / demo:** `npm run build` emits `frontend/dist`; `create_app()` detects it and serves
   the SPA and assets from the same Uvicorn process, so one command runs the whole product.
-- **Vercel:** `vercel.json` builds `frontend/` into static files and deploys `api/index.py` (which
-  imports `backend/app`) as a Python serverless function. `/api/*` is rewritten to that function;
-  FastAPI still sees the original path, so routing is identical to local development. The read-only
-  code directory means the price cache moves to the function's temp directory (`VERCEL` env var).
+- **Vercel:** `vercel.json` defines two services in one project — `backend` (FastAPI, root
+  `backend/`, entrypoint `app/main.py`) and `frontend` (Vite static build, root `frontend/`).
+  Top-level rewrites send `/api/*` to the backend and everything else to the frontend, so both share
+  one domain and the browser's relative `/api/...` calls work unchanged. Neither service calls the
+  other server-side, so no service bindings are needed. The read-only code directory means the price
+  cache moves to the function's temp directory (`VERCEL` env var). API docs are served at
+  `/api/docs` so they sit behind the same public route.
 - **Shares input mode** is purely a frontend concern: `lib/portfolio.ts` converts shares × buy price
   into cost weights and a total initial investment, so the API contract is the same for both modes.
 - No secrets are required. The only external call is to Yahoo Finance.

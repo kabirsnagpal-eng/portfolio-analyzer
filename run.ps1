@@ -14,5 +14,5 @@ if (-not (Test-Path (Join-Path $root "frontend\node_modules"))) {
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$root\backend'; & '$py' -m uvicorn app.main:app --port 8000"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$root\frontend'; npm run dev"
-Write-Host "Backend:  http://127.0.0.1:8000/docs"
+Write-Host "Backend:  http://127.0.0.1:8000/api/docs"
 Write-Host "Frontend: http://localhost:5173"

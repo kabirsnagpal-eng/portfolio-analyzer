@@ -78,7 +78,7 @@ Windows (PowerShell):
 ```bash
 cd backend
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
 ```
 
@@ -86,11 +86,11 @@ macOS / Linux:
 ```bash
 cd backend
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --port 8000
 ```
 
-The API is now at http://127.0.0.1:8000 and interactive API docs at http://127.0.0.1:8000/docs.
+The API is now at http://127.0.0.1:8000 and interactive API docs at http://127.0.0.1:8000/api/docs.
 
 ### 2. Frontend (development)
 
@@ -115,16 +115,19 @@ http://127.0.0.1:8000 alongside the API.
 
 ### Deploying to Vercel
 
-The repository is configured for Vercel out of the box (`vercel.json`):
+The repository deploys as one Vercel project with two **services** (`vercel.json`):
 
-- The frontend is built from `frontend/` and served as static files from `frontend/dist`.
-- `api/index.py` exposes the FastAPI app as a Python serverless function; every `/api/*` request is
-  rewritten to it. Its dependencies are in the root `requirements.txt`.
-- On Vercel the price cache lives in the function's temporary directory, so it is per-instance and
-  short-lived.
+| Service | Root | Framework | Public path |
+|---|---|---|---|
+| `backend` | `backend/` | FastAPI (`app/main.py`), deps from `backend/requirements.txt` | `/api/*` (docs at `/api/docs`) |
+| `frontend` | `frontend/` | Vite static build | everything else |
 
-Import the GitHub repository in the Vercel dashboard (no settings to change), or run `npx vercel --prod`
-from the project root.
+The browser calls the API with same-origin relative URLs (`/api/...`), so the services need no
+bindings or hard-coded hostnames. On Vercel the price cache lives in the function's temporary
+directory, so it is per-instance and short-lived.
+
+Import the GitHub repository in the Vercel dashboard (no settings to change); every push to `main`
+redeploys.
 
 Note: Yahoo Finance sometimes rate-limits requests coming from cloud data centres. If the deployed app
 reports that market data is unavailable, wait a minute and retry.
@@ -174,7 +177,7 @@ portfolio-analyzer/
 │   │       ├── validation.py    # weight validation
 │   │       └── insights.py      # rule-based descriptive observations
 │   ├── tests/                   # pytest suite (67 tests)
-│   ├── requirements.txt
+│   ├── requirements.txt         # runtime deps (requirements-dev.txt adds pytest)
 │   └── pytest.ini
 ├── frontend/
 │   ├── src/
@@ -187,10 +190,10 @@ portfolio-analyzer/
 │   │   ├── services/api.ts      # Typed API client
 │   │   └── types/api.ts         # Types mirroring backend schemas
 │   ├── package.json, vite.config.ts, tailwind.config.js, tsconfig.json
-├── api/index.py                 # Vercel serverless entry point (wraps the FastAPI app)
+
 ├── docs/                        # Architecture, methodology, pipeline, API, design system, limitations
-├── requirements.txt             # Runtime deps for the Vercel function
-├── vercel.json                  # Vercel build + routing config
+
+├── vercel.json                  # Vercel services: frontend (static) + backend (FastAPI)
 ├── run.ps1
 └── README.md
 ```

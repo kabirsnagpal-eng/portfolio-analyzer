@@ -39,6 +39,10 @@ def create_app() -> FastAPI:
         title="Folio — Portfolio Analytics API",
         version="1.0.0",
         description="Historical performance and risk analytics for stock portfolios.",
+        # Under /api so the docs are reachable through the same public route as the API.
+        docs_url="/api/docs",
+        redoc_url=None,
+        openapi_url="/api/openapi.json",
     )
     app.add_middleware(
         CORSMiddleware,
