@@ -42,18 +42,28 @@ type TickerStatus = { state: "checking" } | { state: "valid"; name: string | nul
 interface Props {
   onAnalyze: (req: AnalyzeRequest) => void;
   busy: boolean;
+  /** Prefilled form, e.g. from a shared link or a stock page's "Analyze" button. */
+  initialDraft?: PortfolioDraft;
+  /** Run immediately on mount if the prefilled form is valid (shared links). */
+  autoRun?: boolean;
 }
 
-export function Configurator({ onAnalyze, busy }: Props) {
+export function Configurator({ onAnalyze, busy, initialDraft, autoRun }: Props) {
   const root = useRef<HTMLElement>(null);
   useReveal(root);
 
-  const [draft, setDraft] = useState<PortfolioDraft>(() => defaultDraft());
+  const [draft, setDraft] = useState<PortfolioDraft>(() => initialDraft ?? defaultDraft());
   const [showErrors, setShowErrors] = useState(false);
   const [benchmarks, setBenchmarks] = useState<Benchmark[]>(FALLBACK_BENCHMARKS);
   const [customBench, setCustomBench] = useState(false);
   const [tickerStatus, setTickerStatus] = useState<Record<string, TickerStatus>>({});
   const validation = useMemo(() => validateDraft(draft), [draft]);
+
+  useEffect(() => {
+    if (autoRun && validateDraft(draft).valid) onAnalyze(toRequest(draft));
+    // Mount only: a shared link runs once; later edits wait for the button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     api.benchmarks().then(setBenchmarks).catch(() => undefined);

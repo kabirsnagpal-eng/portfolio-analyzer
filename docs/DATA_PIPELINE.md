@@ -148,8 +148,38 @@ close equals its raw price (adjustments only rescale earlier days), so the splic
 on an ex-dividend or split day, when today's return can be distorted until the daily history is
 restated.
 
-## 8. API limitations
+## 8. The NSE + BSE company directory
 
+`backend/scripts/update_listings.py` builds `backend/app/data/listings.json` from official exchange files:
+
+| Source | What it provides |
+|---|---|
+| NSE `EQUITY_L.csv` | Every equity listed on NSE: symbol, name, ISIN, series, listing date |
+| BSE equity bhavcopy (last 5 trading days) | Every BSE scrip that traded: scrip code, symbol, name, ISIN. (BSE's scrip-master API blocks automated access; the daily bhavcopy file does not.) |
+| NSE index files (`ind_nifty50list.csv`, `ind_nifty500list.csv`) | Nifty 50 members (for top movers) and NSE industry labels for the Nifty 500 |
+
+Rules:
+- **Equity shares only.** Indian ISINs encode the security type in characters 8 and 9; only `INE` ISINs
+  with type `01` (company equity) are kept. This removes government securities (`IN0…`), mutual funds and
+  ETFs (`INF…`) and company bonds/NCDs (types `07`, `08`, …).
+- **One entry per company.** NSE and BSE rows are merged by ISIN, so a company listed on both appears once
+  with its NSE symbol and BSE code.
+- **Prices via Yahoo.** NSE listings use `SYMBOL.NS`; BSE-only listings use `BSE_SYMBOL.BO` (Yahoo uses
+  BSE trading symbols, not scrip codes). Some thinly traded BSE scrips have no Yahoo data and show "—".
+
+The snapshot is committed (about 450 KB) so search is instant and never depends on exchange websites at
+runtime; rerun the script to refresh it.
+
+## 9. Quotes for many stocks at once
+
+Directory pages, the watchlist and the market overview use `get_snapshots()`: two batched `yf.download`
+calls (5-minute bars for today's latest price, daily bars for the previous close), parsed per ticker and
+cached for 60 s. Unknown tickers are cached as misses so they are not re-requested on every page.
+
+## 10. API limitations
+
+- Yahoo sometimes rejects the first profile request after a cold start ("Invalid Crumb"); profile
+  lookups retry up to three times and cache a thin answer for only 15 seconds.
 - yfinance is an unofficial client for Yahoo Finance's public endpoints. It has no SLA, can break
   when Yahoo changes its site, and is subject to rate limiting.
 - The first request after the server starts can be slow while yfinance obtains a session

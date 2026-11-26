@@ -12,6 +12,12 @@ fractions** (0.4 = 40%). Dates are ISO `YYYY-MM-DD`.
 | GET | `/api/health` | Liveness check |
 | GET | `/api/benchmarks` | Preset benchmark indices |
 | GET | `/api/tickers/validate?symbol=…` | Check a symbol has recent prices; return its name |
+| GET | `/api/listings` | Directory metadata: counts, industries, snapshot date |
+| GET | `/api/stocks` | Search / page through every NSE and BSE listed company |
+| GET | `/api/quotes?tickers=…` | Latest price and day change for up to 60 tickers |
+| GET | `/api/stock/{ticker}` | Stock page data: profile, key statistics, latest quote |
+| GET | `/api/stock/{ticker}/history?range=…` | Price history for charts |
+| GET | `/api/market/overview` | Index levels and Nifty 50 top gainers/losers |
 | POST | `/api/analyze` | Run a full portfolio analysis |
 
 ---
@@ -162,6 +168,51 @@ Field notes:
 - `insights[].id` ∈ `relative | best | worst | contributor | volatility | drawdown | beta`;
   `tone` ∈ `positive | negative | neutral`.
 
+## Market data endpoints
+
+### GET `/api/stocks`
+
+| Query | Default | Notes |
+|---|---|---|
+| `q` | `""` | Name, NSE symbol, BSE code/symbol or ISIN (at most 60 chars). Ranked: exact symbol, symbol prefix, name prefix, word prefix, substring; ties favour Nifty 500 members, then NSE listings |
+| `exchange` | `all` | `all`, `nse` or `bse` |
+| `industry` | none | NSE industry label (Nifty 500 members only) |
+| `offset`, `limit` | `0`, `25` | `limit` at most 100 |
+
+```json
+{ "total": 3, "offset": 0, "limit": 25, "items": [
+  { "name": "HDFC Bank Limited", "isin": "INE040A01034", "nse_symbol": "HDFCBANK", "bse_code": "500180",
+    "bse_symbol": "HDFCBANK", "industry": "Financial Services", "ticker": "HDFCBANK.NS", "exchanges": ["NSE", "BSE"] } ] }
+```
+
+`ticker` is the Yahoo Finance symbol used for prices: `NSE_SYMBOL.NS`, or `BSE_SYMBOL.BO` for BSE-only companies.
+
+### GET `/api/quotes?tickers=RELIANCE.NS,TCS.NS`
+
+Returns one object per ticker Yahoo has data for (unknown tickers are omitted):
+`{ ticker, price, previous_close, change, change_pct, time, intraday }`. `intraday: false` means only a
+daily close was available. Cached 60 s per server instance. More than 60 tickers returns `422`.
+
+### GET `/api/stock/{ticker}`
+
+`{ ticker, name, company, quote, currency, sector, industry, website, description, employees, location, stats }`
+where `stats` has `market_cap`, `pe_ratio`, `price_to_book`, `beta`, `dividend_yield_pct` (already a
+percentage), `week52_high/low`, `day_high/low`, `volume`, `avg_volume`, each `null` when Yahoo has no
+value. `company` is the directory entry (or `null` for indices and non-Indian symbols). An unknown
+ticker returns `404 not_found`.
+
+### GET `/api/stock/{ticker}/history?range=1y`
+
+`range` is one of `1d` (5-minute bars), `5d` (15-minute), `1m`, `6m`, `1y` (daily), `5y` (weekly), `max`
+(monthly). Returns `{ ticker, range, intraday, points: [{ t, p }] }` with **unadjusted** quoted prices.
+For daily ranges the latest intraday price is appended when Yahoo's daily bars lag a session.
+
+### GET `/api/market/overview`
+
+`{ as_of, indices: [...], gainers: [...], losers: [...], universe: "Nifty 50" }`; each entry is a quote
+with a `name`. Gainers and losers are the top five Nifty 50 members by today's % change (only positive
+or negative moves respectively are listed).
+
 ## Errors
 
 Every error has the same envelope:
@@ -175,6 +226,7 @@ Every error has the same envelope:
 | 422 | `validation_error` | Request body fails schema rules (weights ≠ 100%, duplicate ticker, bad dates, out-of-range numbers, malformed symbol) | `[{ "field": "holdings.0.weight", "message": "…" }]` |
 | 422 | `invalid_ticker` | A holding or the benchmark has no price data in the window | `{ "tickers": ["FAKE.NS"] }` |
 | 422 | `insufficient_data` | No overlapping history, or < 3 aligned trading days | `null` |
+| 404 | `not_found` | Unknown stock ticker on `/api/stock/{ticker}` | `null` |
 | 422 | `invalid_input` | Other invalid value (e.g. malformed `symbol` on validate) | `null` |
 | 503 | `data_unavailable` | Yahoo Finance unreachable or rate-limiting after retries | `null` |
 | 500 | `internal_error` | Unexpected server error (logged server-side; no internals leaked) | `null` |

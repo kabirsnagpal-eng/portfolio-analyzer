@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import { useReveal } from "../hooks/useReveal";
 
 const FORMULAS = [
@@ -77,11 +78,26 @@ export function Footer() {
         <div>
           <p className="text-[15px] font-semibold text-night-text">Folio</p>
           <p className="mt-2">Portfolio analytics, measured honestly.</p>
+          <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+            {[
+              ["/markets", "Markets"],
+              ["/analyze", "Analyze"],
+              ["/watchlist", "Watchlist"],
+              ["/methodology", "Methodology"],
+              ["/about", "About"],
+            ].map(([to, label]) => (
+              <li key={to}>
+                <Link to={to} className="text-night-text/80 transition-colors hover:text-night-text">
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="space-y-3">
           <p>
             <span className="font-medium text-night-text">Not investment advice.</span> Folio provides descriptive analysis of
-            historical prices for educational purposes. It does not recommend buying or selling any security. Past
+            historical and current market data for educational purposes. It does not recommend buying or selling any security. Past
             performance does not guarantee future results.
           </p>
           <p>Market data from Yahoo Finance via the open-source yfinance library; it may be delayed, revised or incomplete.</p>

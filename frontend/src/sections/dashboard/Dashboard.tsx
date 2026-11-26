@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { analysisToCsv, downloadText, requestToQuery } from "../../lib/share";
 import { AllocationDonut } from "../../charts/AllocationDonut";
 import { DrawdownChart } from "../../charts/DrawdownChart";
 import { PerformanceChart } from "../../charts/PerformanceChart";
@@ -6,7 +7,7 @@ import type { AnalysisState } from "../../hooks/useAnalysis";
 import { LIVE_INTERVAL_CLOSED_MS, LIVE_INTERVAL_OPEN_MS } from "../../hooks/useLiveRefresh";
 import { useReveal } from "../../hooks/useReveal";
 import { formatDate, formatPercent } from "../../lib/format";
-import type { AnalyzeResponse } from "../../types/api";
+import type { AnalyzeRequest, AnalyzeResponse } from "../../types/api";
 import { DashSection } from "./DashSection";
 import { DataQualityNotice } from "./DataQualityNotice";
 import { HoldingsTable } from "./HoldingsTable";
@@ -35,7 +36,7 @@ export function Dashboard({ state, onRetry, liveEnabled, onToggleLive, onRefresh
               Your portfolio, <span className="font-serif font-normal italic">measured.</span>
             </h2>
           </div>
-          {state.status === "success" && <RunSummary data={state.data} />}
+          {state.status === "success" && <RunSummary data={state.data} request={state.request} />}
         </div>
         {state.status === "idle" && <EmptyState />}
         {state.status === "loading" && <LoadingState />}
@@ -66,13 +67,37 @@ export function Dashboard({ state, onRetry, liveEnabled, onToggleLive, onRefresh
   );
 }
 
-function RunSummary({ data }: { data: AnalyzeResponse }) {
+function RunSummary({ data, request }: { data: AnalyzeResponse; request: AnalyzeRequest }) {
+  const [copied, setCopied] = useState(false);
+  const share = async () => {
+    const url = `${window.location.origin}/analyze?${requestToQuery(request)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link", url);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+  const exportCsv = () =>
+    downloadText(`folio-analysis-${data.meta.start_date}-to-${data.meta.end_date}.csv`, analysisToCsv(data));
+
   return (
-    <p className="num text-right text-[13px] leading-relaxed text-ink-3">
-      {data.holdings.length} holdings · {formatDate(data.meta.start_date)} – {formatDate(data.meta.end_date)}
-      <br />
-      {data.meta.trading_days.toLocaleString("en-IN")} trading days · rebalanced daily · adjusted closes
-    </p>
+    <div className="flex flex-col items-end gap-3">
+      <p className="num text-right text-[13px] leading-relaxed text-ink-3">
+        {data.holdings.length} holdings · {formatDate(data.meta.start_date)} – {formatDate(data.meta.end_date)}
+        <br />
+        {data.meta.trading_days.toLocaleString("en-IN")} trading days · rebalanced daily · adjusted closes
+      </p>
+      <div className="flex gap-1">
+        <button type="button" className="btn-ghost" onClick={share} aria-live="polite">
+          {copied ? "Link copied ✓" : "Share link"}
+        </button>
+        <button type="button" className="btn-ghost" onClick={exportCsv}>
+          Export CSV
+        </button>
+      </div>
+    </div>
   );
 }
 

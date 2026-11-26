@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app.api.markets import router as markets_router
 from app.api.routes import router
 from app.data.cleaning import InsufficientDataError
 from app.data.market_data import InvalidTickerError, MarketDataUnavailableError
@@ -38,7 +39,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Folio — Portfolio Analytics API",
         version="1.0.0",
-        description="Historical performance and risk analytics for stock portfolios.",
+        description="Portfolio analytics, live prices and a directory of every NSE and BSE listed company.",
         # Under /api so the docs are reachable through the same public route as the API.
         docs_url="/api/docs",
         redoc_url=None,
@@ -54,6 +55,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError):
         return _friendly_validation(exc)
+
+    @app.exception_handler(HTTPException)
+    async def _http(_: Request, exc: HTTPException):
+        code = {404: "not_found"}.get(exc.status_code, "http_error")
+        return _error(exc.status_code, code, str(exc.detail))
 
     @app.exception_handler(InvalidTickerError)
     async def _invalid_ticker(_: Request, exc: InvalidTickerError):
@@ -71,15 +77,16 @@ def create_app() -> FastAPI:
     async def _value_error(_: Request, exc: ValueError):
         if isinstance(exc, ValidationError):  # an internal model failed: that's our bug, not bad input
             logger.exception("Response validation failed", exc_info=exc)
-            return _error(500, "internal_error", "Something went wrong while analysing the portfolio.")
+            return _error(500, "internal_error", "Something went wrong on the server.")
         return _error(422, "invalid_input", str(exc))
 
     @app.exception_handler(Exception)
     async def _unexpected(_: Request, exc: Exception):
         logger.exception("Unhandled error", exc_info=exc)
-        return _error(500, "internal_error", "Something went wrong while analysing the portfolio.")
+        return _error(500, "internal_error", "Something went wrong on the server.")
 
     app.include_router(router)
+    app.include_router(markets_router)
 
     # Serve the production frontend build, if present, so one process runs everything.
     if FRONTEND_DIST.is_dir():

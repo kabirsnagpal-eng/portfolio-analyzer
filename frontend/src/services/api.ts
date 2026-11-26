@@ -1,4 +1,13 @@
 import type { AnalyzeRequest, AnalyzeResponse, ApiErrorBody, Benchmark, TickerCheck } from "../types/api";
+import type {
+  CompanyPage,
+  HistoryRange,
+  ListingsMeta,
+  MarketOverview,
+  Quote,
+  StockDetail,
+  StockHistory,
+} from "../types/markets";
 
 /** Error raised for any non-2xx response, carrying the backend's error code. */
 export class ApiError extends Error {
@@ -56,4 +65,24 @@ export const api = {
   benchmarks: () => request<Benchmark[]>("/api/benchmarks"),
   validateTicker: (symbol: string, signal?: AbortSignal) =>
     request<TickerCheck>(`/api/tickers/validate?symbol=${encodeURIComponent(symbol)}`, { signal }),
+
+  // ---- markets ----
+  listings: () => request<ListingsMeta>("/api/listings"),
+  stocks: (
+    params: { q?: string; exchange?: "all" | "nse" | "bse"; industry?: string; offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && v !== null) qs.set(k, String(v));
+    });
+    return request<CompanyPage>(`/api/stocks?${qs}`, { signal });
+  },
+  quotes: (tickers: string[], signal?: AbortSignal) =>
+    request<Quote[]>(`/api/quotes?tickers=${encodeURIComponent(tickers.join(","))}`, { signal }),
+  stock: (ticker: string, signal?: AbortSignal) =>
+    request<StockDetail>(`/api/stock/${encodeURIComponent(ticker)}`, { signal }),
+  history: (ticker: string, range: HistoryRange, signal?: AbortSignal) =>
+    request<StockHistory>(`/api/stock/${encodeURIComponent(ticker)}/history?range=${range}`, { signal }),
+  overview: (signal?: AbortSignal) => request<MarketOverview>("/api/market/overview", { signal }),
 };

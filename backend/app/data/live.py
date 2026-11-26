@@ -29,6 +29,7 @@ class Quote:
     previous_close: float | None
     time: datetime  # timestamp of the latest bar, timezone-aware (exchange time)
     currency: str | None = None
+    intraday: bool = True  # False when only a daily close was available (time is then that date, 00:00)
 
     @property
     def session_date(self) -> date:

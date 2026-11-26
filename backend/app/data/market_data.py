@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -43,6 +43,21 @@ MAX_ATTEMPTS = 3
 NAME_LOOKUP_TIMEOUT_S = 8.0
 # Live quotes are re-fetched at most this often per ticker (per server instance).
 QUOTE_TTL_S = 30.0
+SNAPSHOT_TTL_S = 60.0
+PROFILE_TTL_S = 15 * 60.0
+# Full Yahoo profiles have 100+ fields; far fewer means a partial response.
+THIN_PROFILE_FIELDS = 60
+PROFILE_ATTEMPTS = 3
+# Chart range -> (yfinance period, bar interval)
+HISTORY_RANGES: dict[str, tuple[str, str]] = {
+    "1d": ("1d", "5m"),
+    "5d": ("5d", "15m"),
+    "1m": ("1mo", "1d"),
+    "6m": ("6mo", "1d"),
+    "1y": ("1y", "1d"),
+    "5y": ("5y", "1wk"),
+    "max": ("max", "1mo"),
+}
 
 KNOWN_NAMES: dict[str, str] = {
     "^NSEI": "Nifty 50",
@@ -86,6 +101,15 @@ class PriceProvider(Protocol):
     def get_quotes(self, tickers: list[str]) -> dict[str, Quote]:
         """Latest intraday quote per ticker (best effort; missing tickers are omitted)."""
 
+    def get_snapshots(self, tickers: list[str]) -> dict[str, Quote]:
+        """Latest price + previous close for many tickers at once (directory, watchlist, movers)."""
+
+    def get_profile(self, ticker: str) -> dict:
+        """Company profile and key statistics (raw Yahoo fields)."""
+
+    def get_history(self, ticker: str, range_key: str) -> pd.Series:
+        """Price history for charts: unadjusted closes indexed by timestamp."""
+
 
 def _safe_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", text)
@@ -106,7 +130,11 @@ class YFinanceProvider:
             yf.set_tz_cache_location(str(cache_dir / "yfinance"))
         self._names_path = cache_dir / "names.json"
         self._lock = threading.Lock()
+        self._profile_lock = threading.Lock()
         self._quotes: dict[str, tuple[float, Quote]] = {}  # ticker -> (fetched monotonic time, quote)
+        self._snapshots: dict[str, tuple[float, Quote | None]] = {}
+        self._profiles: dict[str, tuple[float, dict]] = {}  # ticker -> (expires at, info)
+        self._histories: dict[tuple[str, str], tuple[float, pd.Series]] = {}
 
     # ---------- live quotes ----------
 
@@ -157,6 +185,109 @@ class YFinanceProvider:
                     self._quotes[t] = (now, q)
                     result[t] = q
         return result
+
+    # ---------- snapshots (many tickers at once) ----------
+
+    @staticmethod
+    def _frame_for(data: pd.DataFrame, ticker: str) -> pd.Series:
+        """Close column for one ticker from a yf.download(group_by='ticker') frame."""
+        if data is None or data.empty or ticker not in data.columns.get_level_values(0):
+            return pd.Series(dtype=float)
+        return data[ticker]["Close"].dropna()
+
+    def _download_snapshots(self, tickers: list[str]) -> dict[str, Quote]:
+        import yfinance as yf
+
+        common = dict(auto_adjust=False, progress=False, threads=True, group_by="ticker", multi_level_index=True)
+        try:
+            # Yahoo's daily bars can lag a session; intraday bars carry the latest price.
+            daily = yf.download(tickers, period="7d", interval="1d", **common)
+            intra = yf.download(tickers, period="1d", interval="5m", **common)
+        except Exception as exc:
+            raise MarketDataUnavailableError(f"Could not reach Yahoo Finance: {exc}") from exc
+        out: dict[str, Quote] = {}
+        for t in tickers:
+            d = self._frame_for(daily, t)
+            i = self._frame_for(intra, t)
+            if len(i):
+                stamp = i.index[-1].to_pydatetime()
+                day = pd.Timestamp(stamp.date())
+                earlier = d[pd.DatetimeIndex(d.index).tz_localize(None).normalize() < day] if len(d) else d
+                prev = float(earlier.iloc[-1]) if len(earlier) else None
+                out[t] = Quote(t, float(i.iloc[-1]), prev, stamp, None, True)
+            elif len(d):
+                stamp = pd.Timestamp(d.index[-1]).tz_localize(None).to_pydatetime().replace(tzinfo=timezone.utc)
+                prev = float(d.iloc[-2]) if len(d) > 1 else None
+                out[t] = Quote(t, float(d.iloc[-1]), prev, stamp, None, False)
+        return out
+
+    def get_snapshots(self, tickers: list[str]) -> dict[str, Quote]:
+        now = time.monotonic()
+        result, missing = {}, []
+        for t in tickers:
+            hit = self._snapshots.get(t)
+            if hit and now - hit[0] < SNAPSHOT_TTL_S:
+                if hit[1] is not None:
+                    result[t] = hit[1]
+            else:
+                missing.append(t)
+        if missing:
+            fetched = self._download_snapshots(missing)
+            for t in missing:
+                q = fetched.get(t)
+                self._snapshots[t] = (now, q)  # cache misses too, so unknown symbols aren't re-fetched every call
+                if q is not None:
+                    result[t] = q
+        return result
+
+    # ---------- company profile and chart history ----------
+
+    def get_profile(self, ticker: str) -> dict:
+        import yfinance as yf
+
+        hit = self._profiles.get(ticker)
+        if hit and time.monotonic() < hit[0]:
+            return hit[1]
+        info: dict = {}
+        # Yahoo occasionally answers with a thin profile (no description/sector) when its
+        # session is cold; retry once, and cache a thin answer only briefly.
+        # On a cold start Yahoo often rejects the first profile call with "Invalid Crumb"
+        # (an expired session token) and yfinance silently falls back to a thin profile.
+        # yfinance renews the token on the next call, so retry with a short pause.
+        # Serialised so concurrent page-load requests don't each burn retries.
+        with self._profile_lock:
+            for attempt in range(PROFILE_ATTEMPTS):
+                try:
+                    info = yf.Ticker(ticker).get_info() or {}
+                except Exception as exc:
+                    logger.warning("Profile for %s failed: %s", ticker, exc)
+                    info = {}
+                if len(info) >= THIN_PROFILE_FIELDS:
+                    break
+                if attempt < PROFILE_ATTEMPTS - 1:
+                    time.sleep(1.2 * (attempt + 1))
+        ttl = PROFILE_TTL_S if len(info) >= THIN_PROFILE_FIELDS else 15.0
+        self._profiles[ticker] = (time.monotonic() + ttl, info)
+        return info
+
+    def get_history(self, ticker: str, range_key: str) -> pd.Series:
+        import yfinance as yf
+
+        period, interval = HISTORY_RANGES[range_key]
+        key = (ticker, range_key)
+        ttl = 60.0 if range_key in ("1d", "5d") else PROFILE_TTL_S
+        hit = self._histories.get(key)
+        if hit and time.monotonic() - hit[0] < ttl:
+            return hit[1]
+        try:
+            # Unadjusted closes: charts should show the prices that were actually quoted.
+            frame = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False,
+                                              actions=False, raise_errors=False)
+        except Exception as exc:
+            raise MarketDataUnavailableError(f"Could not reach Yahoo Finance: {exc}") from exc
+        series = frame["Close"].dropna() if frame is not None and not frame.empty and "Close" in frame else pd.Series(dtype=float)
+        self._histories[key] = (time.monotonic(), series)
+        return series
 
     # ---------- prices ----------
 

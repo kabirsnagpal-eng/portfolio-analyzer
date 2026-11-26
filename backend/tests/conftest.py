@@ -30,6 +30,19 @@ class SyntheticProvider:
     def get_quotes(self, tickers):
         return {t: self.quotes[t] for t in tickers if t in self.quotes}
 
+    # Market-data endpoints: snapshots reuse the same quote fixtures
+    profiles: dict = {}
+    histories: dict = {}
+
+    def get_snapshots(self, tickers):
+        return self.get_quotes(tickers)
+
+    def get_profile(self, ticker):
+        return self.profiles.get(ticker, {})
+
+    def get_history(self, ticker, range_key):
+        return self.histories.get((ticker, range_key), pd.Series(dtype=float))
+
     def get_prices(self, tickers, start: date, end: date):
         self.calls.append(list(tickers))
         invalid = [t for t in tickers if t not in self.prices]

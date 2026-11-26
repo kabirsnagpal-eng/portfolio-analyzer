@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import { DESKTOP_MOTION, MOTION_OK, gsap, useGSAP } from "../lib/gsap";
 
 const HEADLINE = ["Understand", "your", "portfolio."];
@@ -75,7 +76,7 @@ export function Hero() {
       </div>
 
       <div className="hero-inner page relative">
-        <p className="hero-sub eyebrow mb-6">Portfolio analytics · NSE &amp; global equities</p>
+        <p className="hero-sub eyebrow mb-6">Portfolio analytics · live NSE &amp; BSE markets</p>
         <h1 className="font-serif text-display font-normal">
           {HEADLINE.map((w, i) => (
             <span key={w} className="-mb-[0.2em] inline-block overflow-hidden pb-[0.2em] pr-[0.04em] align-bottom">
@@ -90,13 +91,13 @@ export function Hero() {
             risk-adjusted return — side by side with the market.
           </p>
           <div className="hero-sub flex flex-wrap items-center gap-4">
-            <a href="#analyze" className="btn-primary">
+            <Link to="/analyze" className="btn-primary">
               Analyze your portfolio
               <span aria-hidden="true">→</span>
-            </a>
-            <a href="#how" className="link-arrow text-[15px]">
-              How it works <span aria-hidden="true">›</span>
-            </a>
+            </Link>
+            <Link to="/markets" className="link-arrow text-[15px]">
+              Explore 4,800+ stocks <span aria-hidden="true">›</span>
+            </Link>
           </div>
         </div>
       </div>

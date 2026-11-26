@@ -50,6 +50,22 @@ over a small JSON HTTP API.
 The single exception is the chart's range selector, which *re-bases* an already-computed series to
 100 at the start of the visible window (a display transformation: `value / first × 100`).
 
+## Pages and routing
+
+The frontend is a multi-page single-page application using React Router (`BrowserRouter`). Each page has
+a real URL, so stock pages (`/stock/TCS.NS`), filtered directory views (`/markets?q=hdfc&ex=nse`) and
+analyses (`/analyze?h=...&run=1`) can be bookmarked and shared. On Vercel, the frontend service has a
+catch-all rewrite to `index.html` so deep links load the app, which then renders the right page.
+
+Market pages read from five small endpoints (`/api/stocks`, `/api/quotes`, `/api/stock/{t}`,
+`/api/stock/{t}/history`, `/api/market/overview`) implemented in `backend/app/api/markets.py`. The company
+directory is a committed JSON snapshot searched in memory (`app/data/listings.py`); prices and profiles
+come from the same `PriceProvider` abstraction as the analysis engine, so tests swap in a synthetic
+provider for all of it.
+
+The watchlist is stored in `localStorage` via `useSyncExternalStore` (`hooks/useWatchlist.ts`), so it
+works without accounts and stays in sync across components and tabs.
+
 ## Request lifecycle (`POST /api/analyze`)
 
 1. **Validation** — FastAPI parses the body into `AnalyzeRequest`. Field validators upper-case and
@@ -72,7 +88,9 @@ The single exception is the chart's range selector, which *re-bases* an already-
 
 ```text
 src/
-├── App.tsx                 Page composition and the analyze → scroll-to-results flow
+├── App.tsx                 Layout (Nav, Footer) and routes; scroll-to-top and title on page change
+├── pages/                  HomePage, MarketsPage, StockPage, AnalyzePage, WatchlistPage, AboutPage,
+│                           MethodologyPage / NotFoundPage (SimplePages.tsx)
 ├── main.tsx                React root
 ├── index.css               Tailwind layers + component classes (.field, .btn-primary, .eyebrow …)
 ├── types/api.ts            Mirrors backend schemas (single place to update if the API changes)
