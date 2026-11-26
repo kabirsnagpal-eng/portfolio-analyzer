@@ -20,6 +20,8 @@ from typing import Protocol
 
 import pandas as pd
 
+from app.data.live import Quote
+
 logger = logging.getLogger(__name__)
 
 def _default_cache_dir() -> Path:
@@ -39,6 +41,8 @@ RECENT_TTL = timedelta(hours=6)
 HISTORICAL_TTL = timedelta(days=7)
 MAX_ATTEMPTS = 3
 NAME_LOOKUP_TIMEOUT_S = 8.0
+# Live quotes are re-fetched at most this often per ticker (per server instance).
+QUOTE_TTL_S = 30.0
 
 KNOWN_NAMES: dict[str, str] = {
     "^NSEI": "Nifty 50",
@@ -79,6 +83,9 @@ class PriceProvider(Protocol):
     def get_names(self, tickers: list[str]) -> dict[str, str | None]:
         """Human-readable security names (best effort)."""
 
+    def get_quotes(self, tickers: list[str]) -> dict[str, Quote]:
+        """Latest intraday quote per ticker (best effort; missing tickers are omitted)."""
+
 
 def _safe_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", text)
@@ -99,6 +106,57 @@ class YFinanceProvider:
             yf.set_tz_cache_location(str(cache_dir / "yfinance"))
         self._names_path = cache_dir / "names.json"
         self._lock = threading.Lock()
+        self._quotes: dict[str, tuple[float, Quote]] = {}  # ticker -> (fetched monotonic time, quote)
+
+    # ---------- live quotes ----------
+
+    @staticmethod
+    def _fetch_quote(ticker: str) -> Quote | None:
+        """Latest 1-minute bar plus previous close. Returns None if Yahoo has no intraday data."""
+        import yfinance as yf
+
+        try:
+            tk = yf.Ticker(ticker)
+            bars = tk.history(period="1d", interval="1m", auto_adjust=False, actions=False, raise_errors=False)
+            if bars is None or bars.empty:
+                bars = tk.history(period="5d", interval="1m", auto_adjust=False, actions=False, raise_errors=False)
+            if bars is None or bars.empty or "Close" not in bars:
+                return None
+            closes = bars["Close"].dropna()
+            if closes.empty:
+                return None
+            price = float(closes.iloc[-1])
+            stamp = closes.index[-1].to_pydatetime()
+            prev = currency = None
+            try:
+                info = tk.fast_info
+                prev = float(info.previous_close) if info.previous_close else None
+                currency = info.currency
+            except Exception:  # previous close is a nicety; the price is what matters
+                pass
+            return Quote(ticker=ticker, price=price, previous_close=prev, time=stamp, currency=currency)
+        except Exception as exc:
+            logger.warning("Live quote for %s failed: %s", ticker, exc)
+            return None
+
+    def get_quotes(self, tickers: list[str]) -> dict[str, Quote]:
+        now = time.monotonic()
+        result: dict[str, Quote] = {}
+        missing: list[str] = []
+        for t in tickers:
+            hit = self._quotes.get(t)
+            if hit and now - hit[0] < QUOTE_TTL_S:
+                result[t] = hit[1]
+            else:
+                missing.append(t)
+        if missing:
+            with ThreadPoolExecutor(max_workers=min(6, len(missing))) as pool:
+                fetched = dict(zip(missing, pool.map(self._fetch_quote, missing)))
+            for t, q in fetched.items():
+                if q is not None:
+                    self._quotes[t] = (now, q)
+                    result[t] = q
+        return result
 
     # ---------- prices ----------
 

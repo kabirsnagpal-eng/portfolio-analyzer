@@ -20,6 +20,12 @@ remain:
   dividends paid *afterwards*. Returns are still correct, but the "start price" shown is not the
   price an investor actually saw on that day.
 
+## Live prices are near-real-time, not tick-by-tick
+"Live" means the latest 1-minute bar Yahoo Finance publishes. It can lag the exchange by a few minutes,
+the dashboard refreshes at most once a minute, and Yahoo may rate-limit frequent requests from cloud
+servers. On an ex-dividend or split day, splicing today's raw price onto adjusted history can distort
+that day's return until Yahoo restates the history. Exchange-grade real-time data requires a paid feed.
+
 ## Historical data limitations
 - Yahoo Finance via yfinance is unofficial and has no service guarantee; data can be missing,
   delayed, duplicated or wrong, particularly for small caps and older Indian data.

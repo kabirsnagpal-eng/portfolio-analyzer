@@ -123,7 +123,32 @@ Beta uses an additional inner join on dates as a safeguard.
 - Unreadable cache files are ignored and re-fetched.
 - Only successful, non-empty downloads are cached.
 
-## 7. API limitations
+## 7. Live intraday prices
+
+When a request has `live: true` and its `end_date` is within the last 5 days
+(`app/data/live.py`, `YFinanceProvider.get_quotes`):
+
+1. For every holding and the benchmark, fetch the latest **1-minute bar** with
+   `Ticker.history(period="1d", interval="1m")` (falling back to `period="5d"` when today has no bars
+   yet) and the previous close from `Ticker.fast_info`. Quotes are cached in memory for 30 seconds per
+   server instance.
+2. `splice_live_prices()` uses each quote as that ticker's price for its **session date** (the date in
+   the exchange's own timezone): it replaces today's provisional daily bar, appends a new bar if the
+   daily history doesn't have today yet, and ignores stale quotes. Quotes dated after `end_date` are
+   never spliced.
+3. The spliced series then go through exactly the same alignment, returns and metrics as historical
+   data, so the value path, charts, drawdown, metrics, holdings and insights all include the latest
+   price.
+
+The frontend re-runs the same request every 60 s while `market_open` is true and every 5 minutes
+otherwise, only while the tab is visible. Refreshes update the dashboard in place.
+
+Intraday bars are unadjusted, while the daily history is split- and dividend-adjusted. Today's adjusted
+close equals its raw price (adjustments only rescale earlier days), so the splice is consistent, except
+on an ex-dividend or split day, when today's return can be distorted until the daily history is
+restated.
+
+## 8. API limitations
 
 - yfinance is an unofficial client for Yahoo Finance's public endpoints. It has no SLA, can break
   when Yahoo changes its site, and is subject to rate limiting.

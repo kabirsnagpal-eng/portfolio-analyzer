@@ -35,6 +35,14 @@ quantitative engine (Python + pandas).
 - Holding-level start/end adjusted price, total return and contribution (weight × return)
 - Rule-based insights: relative performance, best/worst holding, largest contributor, volatility vs benchmark, deepest drawdown, beta
 
+**Live prices**
+- When the period ends today, the latest Yahoo Finance 1-minute price is used as today's price, so the
+  overview, charts, metrics, holdings and insights all reflect it
+- A live panel shows each holding's and the benchmark's latest price, today's change and the bar time
+  (exchange time), with market open/closed status
+- Auto-update re-runs the analysis every minute while the market is open (every 5 minutes when closed),
+  in place and without replaying animations; pauses in background tabs; manual Refresh button
+
 **Data pipeline**
 - yfinance adjusted closes, cached on disk (6 h for recent windows, 7 days for historical)
 - Cross-market calendar alignment; bounded forward-fill (≤ 5 trading days) of short gaps only

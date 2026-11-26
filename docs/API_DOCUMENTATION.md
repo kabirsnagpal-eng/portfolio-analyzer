@@ -81,6 +81,7 @@ Data source down → `503 data_unavailable`.
 | `benchmark` | string | no | `^NSEI` | Same pattern as tickers |
 | `initial_investment` | number | no | `100000` | `> 0`, ≤ 1e13 |
 | `risk_free_rate` | number | no | `0.065` | `−0.05 ≤ r ≤ 0.5` (annual, as a fraction) |
+| `live` | boolean | no | `false` | Use the latest intraday price as today's price. Applied only when `end_date` is within the last 5 days |
 
 #### Response `200`
 
@@ -132,11 +133,31 @@ Data source down → `503 data_unavailable`.
 
 (Numbers above are illustrative of shape; actual values depend on live data.)
 
+`live` (present only when `live: true` and the period ends today, otherwise `null`):
+
+```json
+"live": {
+  "as_of": "2026-11-26T15:29:00+05:30",
+  "fetched_at": "2026-11-26T20:51:43Z",
+  "market_open": false,
+  "spliced": ["RELIANCE.NS", "TCS.NS", "INFY.NS", "^NSEI"],
+  "quotes": [
+    { "ticker": "RELIANCE.NS", "name": "RELIANCE INDUSTRIES LTD", "price": 1396.2,
+      "previous_close": 1373.9, "change": 22.3, "change_pct": 0.0162,
+      "time": "2026-11-26T15:28:00+05:30", "currency": "INR", "is_benchmark": false }
+  ]
+}
+```
+
 Field notes:
 - `series[].portfolio` / `benchmark` are rebased to 100 on the first date.
 - `series[].portfolio_drawdown` / `benchmark_drawdown` are ≤ 0.
 - `sharpe_ratio` is `null` when volatility is zero; `beta` is `null` when benchmark variance is zero.
 - `recovery_date` is `null` if the portfolio had not regained its peak by `end_date`.
+- `live.spliced` lists the tickers whose latest price replaced (or was appended as) the last daily
+  price; every other field in the response is computed from those spliced prices. Tickers without an
+  intraday quote are omitted from `live.quotes` and use their daily history unchanged.
+- `live.market_open` is a heuristic: true if any quote's latest bar is under 30 minutes old.
 - `contribution` = `weight × total_return` (fraction; ×100 for percentage points).
 - `insights[].id` ∈ `relative | best | worst | contributor | volatility | drawdown | beta`;
   `tone` ∈ `positive | negative | neutral`.

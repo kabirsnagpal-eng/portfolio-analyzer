@@ -3,7 +3,7 @@ import type { TooltipProps } from "recharts";
 import { useMemo } from "react";
 import { useInView } from "../hooks/useInView";
 import { formatDate, formatPercent } from "../lib/format";
-import { prefersReducedMotion } from "../lib/gsap";
+import { useEntryAnimation } from "../hooks/useEntryAnimation";
 import type { DrawdownInfo, SeriesPoint } from "../types/api";
 import { CHART, TICK_STYLE, dateTicks } from "./theme";
 
@@ -20,7 +20,7 @@ interface Props {
  */
 export function DrawdownChart({ series, drawdown, benchmarkLabel }: Props) {
   const [ref, inView] = useInView<HTMLDivElement>(0.25);
-  const animate = !prefersReducedMotion();
+  const animate = useEntryAnimation(inView);
   const xTicks = useMemo(() => dateTicks(series.map((p) => p.date)), [series]);
   const episodeEnd = drawdown.recovery_date ?? series[series.length - 1]?.date;
 

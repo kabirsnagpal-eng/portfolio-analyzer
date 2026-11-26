@@ -7,9 +7,12 @@ in ``app.finance``.
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
+
 import pandas as pd
 
 from app.data.cleaning import InsufficientDataError, align_prices
+from app.data.live import Quote, is_market_open, splice_live_prices
 from app.data.market_data import PriceProvider
 from app.finance import metrics as m
 from app.finance.attribution import contributions
@@ -23,7 +26,10 @@ from app.finance.returns import (
     value_series,
 )
 from app.schemas.portfolio import (
+    LIVE_WINDOW_DAYS,
     AnalysisMeta,
+    LiveInfo,
+    LiveQuote,
     AnalyzeRequest,
     AnalyzeResponse,
     DataQuality,
@@ -63,6 +69,17 @@ def run_analysis(req: AnalyzeRequest, provider: PriceProvider) -> AnalyzeRespons
     needed = list(dict.fromkeys(tickers + [bench]))  # unique, order preserved
 
     raw = provider.get_prices(needed, req.start_date, req.end_date)
+
+    # Live mode: the latest intraday price becomes today's price, so every
+    # number below (values, charts, metrics, holdings) reflects it.
+    quotes: dict[str, Quote] = {}
+    spliced: list[str] = []
+    fetched_at = datetime.now(timezone.utc)
+    if req.live and (date.today() - req.end_date).days <= LIVE_WINDOW_DAYS:
+        quotes = provider.get_quotes(needed)
+        in_window = {t: q for t, q in quotes.items() if q.session_date <= req.end_date}
+        raw, spliced = splice_live_prices({t: raw[t] for t in needed}, in_window)
+
     aligned, quality = align_prices({t: raw[t] for t in needed})
 
     prices = aligned[tickers]
@@ -140,8 +157,27 @@ def run_analysis(req: AnalyzeRequest, provider: PriceProvider) -> AnalyzeRespons
         recovery_date=episode.recovery_date.date() if episode.recovery_date is not None else None,
     )
 
+    live_info = None
+    if quotes:
+        live_info = LiveInfo(
+            as_of=max(q.time for q in quotes.values()),
+            fetched_at=fetched_at,
+            market_open=is_market_open(list(quotes.values())),
+            spliced=spliced,
+            quotes=[
+                LiveQuote(
+                    ticker=t, name=names.get(t), price=q.price, previous_close=q.previous_close,
+                    change=q.change, change_pct=q.change_pct, time=q.time, currency=q.currency,
+                    is_benchmark=(t == bench and t not in tickers),
+                )
+                for t in needed
+                if (q := quotes.get(t)) is not None
+            ],
+        )
+
     ending = float(port_values.iloc[-1])
     return AnalyzeResponse(
+        live=live_info,
         meta=AnalysisMeta(
             requested_start=req.start_date,
             requested_end=req.end_date,

@@ -1,14 +1,16 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { AllocationDonut } from "../../charts/AllocationDonut";
 import { DrawdownChart } from "../../charts/DrawdownChart";
 import { PerformanceChart } from "../../charts/PerformanceChart";
 import type { AnalysisState } from "../../hooks/useAnalysis";
+import { LIVE_INTERVAL_CLOSED_MS, LIVE_INTERVAL_OPEN_MS } from "../../hooks/useLiveRefresh";
 import { useReveal } from "../../hooks/useReveal";
 import { formatDate, formatPercent } from "../../lib/format";
 import type { AnalyzeResponse } from "../../types/api";
 import { DashSection } from "./DashSection";
 import { DataQualityNotice } from "./DataQualityNotice";
 import { HoldingsTable } from "./HoldingsTable";
+import { LivePanel } from "./LivePanel";
 import { Insights } from "./Insights";
 import { MetricsGrid } from "./MetricsGrid";
 import { Overview } from "./Overview";
@@ -17,9 +19,12 @@ import { EmptyState, ErrorState, LoadingState } from "./States";
 interface Props {
   state: AnalysisState;
   onRetry: () => void;
+  liveEnabled: boolean;
+  onToggleLive: () => void;
+  onRefreshNow: () => void;
 }
 
-export function Dashboard({ state, onRetry }: Props) {
+export function Dashboard({ state, onRetry, liveEnabled, onToggleLive, onRefreshNow }: Props) {
   return (
     <section id="results" className="scroll-mt-14 border-t border-line bg-paper">
       <div className="page pt-20 sm:pt-28">
@@ -35,14 +40,31 @@ export function Dashboard({ state, onRetry }: Props) {
         {state.status === "idle" && <EmptyState />}
         {state.status === "loading" && <LoadingState />}
         {state.status === "error" && <ErrorState error={state.error} onRetry={onRetry} />}
-        {state.status === "success" && <Results key={resultKey(state.data)} data={state.data} />}
+        {state.status === "success" && (
+          <Results
+            // Keyed by the inputs, not the data, so live refreshes update in place instead of remounting.
+            key={JSON.stringify(state.request)}
+            data={state.data}
+            livePanel={
+              state.data.live && (
+                <LivePanel
+                  live={state.data.live}
+                  enabled={liveEnabled}
+                  onToggle={onToggleLive}
+                  onRefreshNow={onRefreshNow}
+                  refreshing={state.refreshing}
+                  refreshError={state.refreshError}
+                  receivedAt={state.receivedAt}
+                  intervalMs={state.data.live.market_open ? LIVE_INTERVAL_OPEN_MS : LIVE_INTERVAL_CLOSED_MS}
+                />
+              )
+            }
+          />
+        )}
       </div>
     </section>
   );
 }
-
-const resultKey = (d: AnalyzeResponse) =>
-  `${d.meta.start_date}-${d.meta.end_date}-${d.meta.benchmark}-${d.holdings.map((h) => h.ticker + h.weight).join()}-${d.meta.initial_investment}-${d.meta.risk_free_rate}`;
 
 function RunSummary({ data }: { data: AnalyzeResponse }) {
   return (
@@ -54,14 +76,16 @@ function RunSummary({ data }: { data: AnalyzeResponse }) {
   );
 }
 
-function Results({ data }: { data: AnalyzeResponse }) {
+function Results({ data, livePanel }: { data: AnalyzeResponse; livePanel: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
-  useReveal(root, [data]);
+  // Reveal once per analysis; live refreshes must not replay the entrance animations.
+  useReveal(root, []);
   const bench = data.meta.benchmark_name ?? data.meta.benchmark;
   const dd = data.drawdown;
 
   return (
     <div ref={root} className="pt-12">
+      {livePanel}
       <div className="mb-10" data-reveal>
         <DataQualityNotice quality={data.data_quality} />
       </div>

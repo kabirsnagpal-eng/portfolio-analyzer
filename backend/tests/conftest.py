@@ -21,10 +21,14 @@ def business_days(start: str, periods: int) -> pd.DatetimeIndex:
 class SyntheticProvider:
     """A PriceProvider backed by in-memory series. Unknown tickers are 'invalid'."""
 
-    def __init__(self, prices: dict[str, pd.Series], names: dict[str, str] | None = None):
+    def __init__(self, prices: dict[str, pd.Series], names: dict[str, str] | None = None, quotes=None):
         self.prices = prices
         self.names = names or {}
+        self.quotes = quotes or {}
         self.calls: list[list[str]] = []
+
+    def get_quotes(self, tickers):
+        return {t: self.quotes[t] for t in tickers if t in self.quotes}
 
     def get_prices(self, tickers, start: date, end: date):
         self.calls.append(list(tickers))

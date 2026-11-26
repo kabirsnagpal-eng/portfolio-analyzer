@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import type { TooltipProps } from "recharts";
 import { useInView } from "../hooks/useInView";
 import { formatCurrency, formatDate, formatPercent } from "../lib/format";
-import { prefersReducedMotion } from "../lib/gsap";
+import { useEntryAnimation } from "../hooks/useEntryAnimation";
 import type { SeriesPoint } from "../types/api";
 import { CHART, TICK_STYLE, dateTicks } from "./theme";
 
@@ -54,7 +54,7 @@ export function PerformanceChart({ series, benchmarkLabel }: Props) {
   }, [series, range]);
 
   const last = rows[rows.length - 1];
-  const animate = !prefersReducedMotion();
+  const animate = useEntryAnimation(inView);
   const xTicks = useMemo(() => dateTicks(rows.map((r) => r.date)), [rows]);
 
   return (

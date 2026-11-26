@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { useInView } from "../hooks/useInView";
 import { formatPercent } from "../lib/format";
-import { prefersReducedMotion } from "../lib/gsap";
+import { useEntryAnimation } from "../hooks/useEntryAnimation";
 import type { HoldingResult } from "../types/api";
 import { CATEGORICAL, CHART, OTHER_COLOR } from "./theme";
 
@@ -36,6 +36,7 @@ export function AllocationDonut({ holdings }: { holdings: HoldingResult[] }) {
   const slices = useMemo(() => toSlices(holdings), [holdings]);
   const [hover, setHover] = useState<number | null>(null);
   const [ref, inView] = useInView<HTMLDivElement>(0.3);
+  const animate = useEntryAnimation(inView);
   const focus = hover !== null ? slices[hover] : null;
 
   return (
@@ -54,7 +55,7 @@ export function AllocationDonut({ holdings }: { holdings: HoldingResult[] }) {
                 endAngle={-270}
                 stroke={CHART.surface}
                 strokeWidth={2}
-                isAnimationActive={!prefersReducedMotion()}
+                isAnimationActive={animate}
                 animationDuration={1400}
                 onMouseEnter={(_, i) => setHover(i)}
                 onMouseLeave={() => setHover(null)}

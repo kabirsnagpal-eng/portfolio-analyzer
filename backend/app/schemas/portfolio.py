@@ -7,7 +7,7 @@ Units: weights, returns, rates and drawdowns are DECIMAL FRACTIONS
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -18,6 +18,8 @@ TICKER_PATTERN = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=&^]{0,19}$")
 MAX_HOLDINGS = 25
 MIN_PERIOD_DAYS = 30
 EARLIEST_START = date(1990, 1, 1)
+# Live prices are only meaningful when the analysis ends at (or very near) today.
+LIVE_WINDOW_DAYS = 5
 
 
 def _clean_ticker(value: str) -> str:
@@ -63,6 +65,11 @@ class AnalyzeRequest(BaseModel):
     benchmark: str = "^NSEI"
     initial_investment: float = Field(100_000, gt=0, le=1e13)
     risk_free_rate: float = Field(0.065, ge=-0.05, le=0.5, description="Annual rate as a fraction.")
+    live: bool = Field(
+        False,
+        description="Use the latest intraday price as today's price. Applies only when end_date is within "
+        f"the last {LIVE_WINDOW_DAYS} days.",
+    )
 
     @field_validator("benchmark")
     @classmethod
@@ -165,7 +172,28 @@ class Summary(BaseModel):
     benchmark_ending_value: float
 
 
+class LiveQuote(BaseModel):
+    ticker: str
+    name: str | None
+    price: float
+    previous_close: float | None
+    change: float | None
+    change_pct: float | None = Field(None, description="Fraction, e.g. 0.012 = +1.2%.")
+    time: datetime = Field(..., description="Timestamp of the latest 1-minute bar (exchange time, with offset).")
+    currency: str | None
+    is_benchmark: bool = False
+
+
+class LiveInfo(BaseModel):
+    as_of: datetime = Field(..., description="Newest bar time across all quotes.")
+    fetched_at: datetime
+    market_open: bool = Field(..., description="Heuristic: a bar arrived within the last 30 minutes.")
+    spliced: list[str] = Field(..., description="Tickers whose latest price was used as today's price.")
+    quotes: list[LiveQuote]
+
+
 class AnalyzeResponse(BaseModel):
+    live: LiveInfo | None = Field(None, description="Present only when live=true and the period ends today.")
     meta: AnalysisMeta
     summary: Summary
     portfolio: MetricSet

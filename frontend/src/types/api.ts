@@ -15,6 +15,8 @@ export interface AnalyzeRequest {
   benchmark: string;
   initial_investment: number;
   risk_free_rate: number;
+  /** Use the latest intraday price as today's price (ignored by the API for historical periods). */
+  live?: boolean;
 }
 
 export interface MetricSet {
@@ -91,7 +93,29 @@ export interface Summary {
   benchmark_ending_value: number;
 }
 
+export interface LiveQuote {
+  ticker: string;
+  name: string | null;
+  price: number;
+  previous_close: number | null;
+  change: number | null;
+  change_pct: number | null;
+  time: string; // ISO timestamp with exchange offset
+  currency: string | null;
+  is_benchmark: boolean;
+}
+
+export interface LiveInfo {
+  as_of: string;
+  fetched_at: string;
+  market_open: boolean;
+  spliced: string[];
+  quotes: LiveQuote[];
+}
+
 export interface AnalyzeResponse {
+  /** Present only when the request asked for live prices and the period ends today. */
+  live: LiveInfo | null;
   meta: AnalysisMeta;
   summary: Summary;
   portfolio: MetricSet;

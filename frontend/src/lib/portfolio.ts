@@ -203,6 +203,8 @@ export function toRequest(draft: PortfolioDraft): AnalyzeRequest {
     benchmark: draft.benchmark.trim().toUpperCase(),
     initial_investment: sharesMode ? totalCost(draft.holdings) : parseNumber(draft.initialInvestment),
     risk_free_rate: parseNumber(draft.riskFreeRate) / 100,
+    // Always ask for live prices; the API only applies them when the period ends today.
+    live: true,
   };
 }
 
